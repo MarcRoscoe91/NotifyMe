@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NotifyMe — App</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <style>
+    :root{
+      --bg:#0b0d10; --panel:#10151b; --muted:#9fb0be; --text:#e6ecf2; --brand:#4da3ff; --brand-2:#8c7cff;
+      --ok:#2ecc71; --warn:#ffb020; --bad:#ff4d4d;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; color:var(--text); background:var(--bg)}
+    header{position:sticky; top:0; background:linear-gradient(180deg, rgba(11,13,16,.92), rgba(11,13,16,.78) 70%, transparent); border-bottom:1px solid #141a21; backdrop-filter:blur(8px)}
+    .nav{max-width:1200px; margin:auto; padding:14px 18px; display:flex; align-items:center; gap:10px}
+    .brand{display:flex; gap:10px; align-items:center; color:#e6ecf2; font-weight:700}
+    .logo{width:26px; height:26px}
+    .right{margin-left:auto; display:flex; gap:8px; align-items:center}
+    .container{max-width:1200px; margin:auto; padding:18px}
+    .layout{display:grid; grid-template-columns:280px 1fr; gap:18px}
+    .panel{border:1px solid #1a2633; border-radius:14px; padding:16px; background:#0d1217}
+    .btn{padding:9px 12px; border-radius:10px; border:1px solid #284055; background:#10151b; color:var(--text); cursor:pointer}
+    .btn.primary{border-color:transparent; background:linear-gradient(135deg, var(--brand), var(--brand-2)); color:#061119; font-weight:700}
+    input, select{width:100%; padding:10px 12px; border-radius:10px; border:1px solid #223142; background:#0c1117; color:var(--text)}
+    .muted{color:var(--muted); font-size:14px}
+    .toolbar{display:flex; justify-content:space-between; align-items:center}
+    .list{display:grid; gap:12px}
+    .item{display:grid; grid-template-columns: 1fr 160px 120px auto; gap:12px; align-items:center; padding:12px; border:1px solid #1a2633; border-radius:12px; background:#0d1217}
+    .status.good{color:var(--ok)} .status.warn{color:var(--warn)} .status.bad{color:var(--bad)}
+    .hidden{display:none}
+    .modal{position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:100}
+    .modal.open{display:flex}
+    .sheet{max-width:680px; width:92%; background:#0c1117; border:1px solid #223142; border-radius:16px; padding:18px}
+    @media (max-width: 1000px){ .layout{grid-template-columns:1fr} .item{grid-template-columns:1fr 140px auto} .hide-sm{display:none} }
+  </style>
+</head>
+<body>
+<header>
+  <nav class="nav">
+    <a class="brand" href="index.html"><img class="logo" src="assets/favicon.svg" alt=""><span>notifyme.co.uk</span></a>
+    <div class="right">
+      <button class="btn" id="settingsBtn">⚙ Settings</button>
+      <button class="btn" id="loginBtn">Sign in</button>
+      <button class="btn hidden" id="logoutBtn">Sign out</button>
+      <button class="btn primary hidden" id="addItemBtn">Add item</button>
+    </div>
+  </nav>
+</header>
+
+<main class="container">
+  <div id="authNotice" class="panel">
+    <strong>Sign in</strong>
+    <p class="muted">Magic-link sign-in via email. Your session cookie is set by the backend.</p>
+    <div style="display:flex; gap:8px; max-width:520px">
+      <input id="email" type="email" placeholder="you@example.com" />
+      <button class="btn primary" id="sendLink">Send link</button>
+    </div>
+    <p class="muted" id="authMsg"></p>
+  </div>
+
+  <div class="layout hidden" id="appArea">
+    <aside class="panel">
+      <strong>Filters</strong>
+      <input id="q" placeholder="Search…" />
+      <select id="sort">
+        <option value="date-asc">Soonest first</option>
+        <option value="date-desc">Latest first</option>
+        <option value="title-asc">Title A→Z</option>
+        <option value="title-desc">Title Z→A</option>
+      </select>
+      <hr style="border-color:#1a2633; margin:14px 0">
+      <strong>Vehicle lookup</strong>
+      <div style="display:flex; gap:8px">
+        <input id="reg" placeholder="e.g., AB12 CDE" />
+        <button class="btn" id="lookup">Lookup</button>
+      </div>
+      <pre id="vehicleOut" class="muted" style="white-space:pre-wrap"></pre>
+    </aside>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div class="muted">Your renewals</div>
+        <div style="display:flex; gap:8px">
+          <button class="btn" id="refresh">Refresh</button>
+          <button class="btn primary" id="addItemBtnTop">Add item</button>
+        </div>
+      </div>
+      <div id="list" class="list" style="margin-top:12px"></div>
+      <div id="empty" class="muted">No items yet.</div>
+    </section>
+  </div>
+</main>
+
+<!-- Settings Modal -->
+<div class="modal" id="settings">
+  <div class="sheet">
+    <h3>Settings</h3>
+    <label>API base URL</label>
+    <input id="apiBase" />
+    <p class="muted">Default: http://localhost:4000</p>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px">
+      <button class="btn" id="closeSettings">Close</button>
+      <button class="btn primary" id="saveSettings">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Item Modal -->
+<div class="modal" id="modal">
+  <div class="sheet">
+    <h3 id="modalTitle">Add item</h3>
+    <form id="form">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+        <div><label>Category</label><select id="category"><option>vehicle</option><option>property</option><option>personal</option><option>custom</option></select></div>
+        <div><label>Sub-category</label><input id="subCategory" placeholder="MOT, Insurance, Passport"/></div>
+        <div><label>Title</label><input id="title" required/></div>
+        <div><label>Provider</label><input id="provider"/></div>
+        <div><label>Expiry date</label><input id="date" type="date" required/></div>
+        <div><label>Status</label><select id="status"><option>active</option><option>renewed</option></select></div>
+        <div><label>Registration</label><input id="regInput" placeholder="AB12 CDE"/></div>
+        <input type="hidden" id="itemId"/>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px">
+        <button class="btn" type="button" id="cancel">Cancel</button>
+        <button class="btn primary" type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// --- Config ---
+const settingsModal = byId('settings');
+const apiBaseInput = byId('apiBase');
+const API_BASE = () => localStorage.getItem('notifyme_api') || 'http://localhost:4000';
+
+// --- Helpers ---
+function byId(id){ return document.getElementById(id) }
+const fmt = d => new Date(d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
+function statusOf(d, st){ if(st==='renewed') return ['Renewed','good']; const days = Math.round((new Date(d)-new Date())/(1000*60*60*24)); if(days<0) return ['Overdue','bad']; if(days<=30) return ['Expiring soon','warn']; return ['All good','good']; }
+
+// --- Auth ---
+async function me(){
+  const r = await fetch(API_BASE()+"/api/auth/me", { credentials:'include' });
+  if(!r.ok) return null;
+  const j = await r.json(); return j.user;
+}
+async function sendMagicLink(){
+  const email = byId('email').value.trim();
+  if(!email) return;
+  const r = await fetch(API_BASE()+"/api/auth/magic-link", { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email }) });
+  if(r.ok){ byId('authMsg').textContent = "Check your email for the sign-in link."; authPopup(); } else { byId('authMsg').textContent = "Could not send link."; }
+}
+function authPopup(){
+  const w = window.open(API_BASE()+"/api/auth/callback?token=invalid-to-open","signin","width=480,height=640");
+  window.addEventListener('message', (e)=>{
+    if(String(e.data).startsWith('notifyme:login:success')){
+      w && w.close(); init();
+    }
+  }, { once:true });
+}
+
+// --- Items API ---
+async function listItems(){ const r = await fetch(API_BASE()+"/api/items", { credentials:'include' }); if(!r.ok) throw new Error('auth'); return (await r.json()).items; }
+async function createItem(body){ const r = await fetch(API_BASE()+"/api/items", { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(body)}); return (await r.json()).item; }
+async function updateItem(id, body){ const r = await fetch(API_BASE()+"/api/items/"+id, { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(body)}); return (await r.json()).item; }
+async function deleteItem(id){ await fetch(API_BASE()+"/api/items/"+id, { method:'DELETE', credentials:'include' }); }
+
+// --- Vehicle lookup ---
+async function lookupReg(){
+  const reg = byId('reg').value.trim();
+  if(!reg){ byId('vehicleOut').textContent = 'Enter a registration.'; return; }
+  const r = await fetch(API_BASE()+"/api/vehicle/lookup?reg="+encodeURIComponent(reg), { credentials:'include' });
+  const j = await r.json();
+  byId('vehicleOut').textContent = JSON.stringify(j, null, 2);
+}
+
+// --- UI state ---
+let items = [];
+function render(){
+  const list = byId('list'); list.innerHTML='';
+  const q = byId('q').value.trim().toLowerCase();
+  const sort = byId('sort').value;
+
+  let view = items.filter(it => (it.title+' '+(it.provider||'')+' '+(it.category||'')+' '+(it.subCategory||'')).toLowerCase().includes(q));
+  view.sort((a,b)=>{
+    if(sort==='date-asc') return new Date(a.expiryDate) - new Date(b.expiryDate);
+    if(sort==='date-desc') return new Date(b.expiryDate) - new Date(a.expiryDate);
+    if(sort==='title-asc') return (a.title||'').localeCompare(b.title||'');
+    if(sort==='title-desc') return (b.title||'').localeCompare(a.title||'');
+    return 0;
+  });
+
+  byId('empty').classList.toggle('hidden', view.length>0);
+  for(const it of view){
+    const [lab, cls] = statusOf(it.expiryDate, it.status);
+    const row = document.createElement('div'); row.className='item';
+    row.innerHTML = `
+      <div><strong>${escape(it.title)}</strong><div class="muted">${escape(it.category)}${it.subCategory? ' — '+escape(it.subCategory):''}${it.provider? ' • '+escape(it.provider):''}</div></div>
+      <div>${fmt(it.expiryDate)}<div class="muted">${Math.round((new Date(it.expiryDate)-new Date())/(1000*60*60*24))} days</div></div>
+      <div class="hide-sm">${escape(it.reg || '—')}</div>
+      <div style="display:flex; gap:6px; justify-content:end">
+        <span class="status ${cls}" style="align-self:center">${lab}</span>
+        <button class="btn edit">Edit</button>
+        <button class="btn del">Delete</button>
+      </div>`;
+    row.querySelector('.edit').onclick = ()=> openModal(it);
+    row.querySelector('.del').onclick = async ()=>{ if(confirm('Delete this item?')){ await deleteItem(it.id); await refresh(); } };
+    list.appendChild(row);
+  }
+}
+
+function escape(s){ return String(s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])) }
+
+// --- Modal ---
+const modal = byId('modal');
+function openModal(it){
+  modal.classList.add('open');
+  byId('itemId').value = it?.id || '';
+  byId('category').value = it?.category || 'vehicle';
+  byId('subCategory').value = it?.subCategory || '';
+  byId('title').value = it?.title || '';
+  byId('provider').value = it?.provider || '';
+  byId('date').value = it?.expiryDate ? it.expiryDate.slice(0,10) : '';
+  byId('status').value = it?.status || 'active';
+  byId('regInput').value = it?.reg || '';
+}
+function closeModal(){ modal.classList.remove('open'); }
+byId('cancel').onclick = closeModal;
+byId('addItemBtn').onclick = ()=> openModal();
+byId('addItemBtnTop').onclick = ()=> openModal();
+byId('form').onsubmit = async (e)=>{
+  e.preventDefault();
+  const body = {
+    category: byId('category').value,
+    subCategory: byId('subCategory').value.trim(),
+    title: byId('title').value.trim(),
+    provider: byId('provider').value.trim(),
+    expiryDate: new Date(byId('date').value).toISOString(),
+    status: byId('status').value,
+    reg: byId('regInput').value.trim()
+  };
+  const id = byId('itemId').value;
+  if(id) await updateItem(id, body); else await createItem(body);
+  closeModal(); await refresh();
+};
+
+// --- Settings ---
+byId('settingsBtn').onclick = ()=>{ apiBaseInput.value = API_BASE(); settingsModal.classList.add('open'); };
+byId('closeSettings').onclick = ()=> settingsModal.classList.remove('open');
+byId('saveSettings').onclick = ()=>{ localStorage.setItem('notifyme_api', apiBaseInput.value.trim()); settingsModal.classList.remove('open'); };
+
+// --- Login/Logout ---
+byId('sendLink').onclick = sendMagicLink;
+byId('loginBtn').onclick = ()=> document.getElementById('authNotice').scrollIntoView({behavior:'smooth'});
+byId('logoutBtn').onclick = async ()=>{ await fetch(API_BASE()+"/api/auth/logout", { method:'POST', credentials:'include' }); location.reload(); };
+
+// --- Lookup ---
+byId('lookup').onclick = lookupReg;
+
+// --- Inputs ---
+byId('q').oninput = render;
+byId('sort').oninput = render;
+byId('refresh').onclick = refresh;
+
+async function refresh(){
+  items = await listItems();
+  render();
+}
+
+async function init(){
+  const user = await me();
+  const authed = !!user;
+  byId('authNotice').classList.toggle('hidden', authed);
+  byId('appArea').classList.toggle('hidden', !authed);
+  byId('addItemBtn').classList.toggle('hidden', !authed);
+  byId('logoutBtn').classList.toggle('hidden', !authed);
+  byId('loginBtn').classList.toggle('hidden', authed);
+  if(authed){ await refresh(); }
+}
+init();
+</script>
+</body>
+</html>
